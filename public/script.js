@@ -182,10 +182,44 @@ function displayResults(result) {
     frameCount.textContent = `总帧数: ${result.totalFrames}`;
     imageSize.textContent = `尺寸: ${result.originalWidth}x${result.originalHeight}`;
     
-    // 显示帧图像
-    displayFrames(result.totalFrames, result.gifPath);
+    // 显示抽样信息
+    const sampleInfo = document.createElement('div');
+    sampleInfo.className = 'sample-info';
     
-    // 显示帧数据
+    let sampleDescription = '';
+    if (result.totalFrames < 10) {
+        if (result.totalFrames <= 2) {
+            sampleDescription = '全部帧';
+        } else {
+            sampleDescription = '首尾两帧';
+        }
+    } else if (result.totalFrames <= 20) {
+        sampleDescription = '首、中、尾三帧';
+    } else {
+        sampleDescription = `均匀抽样5帧，间隔: ${result.sampleInterval}`;
+    }
+    
+    sampleInfo.innerHTML = `
+        <p><strong>抽样信息:</strong></p>
+        <p>抽样帧数: ${result.sampleFrames.length}</p>
+        <p>抽样策略: ${sampleDescription}</p>
+        <p>抽样帧索引: [${result.sampleFrames.join(', ')}]</p>
+    `;
+    
+    // 清空之前的抽样信息
+    const existingSampleInfo = document.querySelector('.sample-info');
+    if (existingSampleInfo) {
+        existingSampleInfo.remove();
+    }
+    
+    // 在信息区域后添加抽样信息
+    const resultsInfo = document.querySelector('.results-info');
+    resultsInfo.appendChild(sampleInfo);
+    
+    // 显示抽样帧图像
+    displaySampleFrames(result);
+    
+    // 显示完整帧数据（保持原有功能）
     displayFrameData(result);
     
     // 显示结果区域
@@ -193,25 +227,104 @@ function displayResults(result) {
     resultsSection.classList.remove('hidden');
 }
 
-// 显示帧图像
-function displayFrames(totalFrames, gifPath) {
-    framesGrid.innerHTML = '';
+// 显示抽样帧图像
+async function displaySampleFrames(result) {
+    framesGrid.innerHTML = '<div class="loading">正在加载抽样帧...</div>';
     
-    for (let i = 0; i < totalFrames; i++) {
+    try {
+        // 请求抽样帧数据
+        const response = await fetch(`/api/sample-frames?gifPath=${encodeURIComponent(result.gifPath)}&sampleFrames=${encodeURIComponent(JSON.stringify(result.sampleFrames))}`);
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        
+        if (!data.success) {
+            throw new Error(data.error || '获取抽样帧失败');
+        }
+        
+        // 清空加载提示
+        framesGrid.innerHTML = '';
+        
+        // 添加抽样说明
+        const sampleHeader = document.createElement('div');
+        sampleHeader.className = 'sample-header';
+        sampleHeader.innerHTML = `
+            <h3>抽样帧预览 (${data.sampleFrames.length}/${result.totalFrames})</h3>
+            <p>为了优化性能，这里只显示抽样后的关键帧</p>
+        `;
+        framesGrid.appendChild(sampleHeader);
+        
+        // 显示抽样帧
+        data.sampleFrames.forEach((frameData, index) => {
+            const frameItem = document.createElement('div');
+            frameItem.className = 'frame-item sample-frame';
+            
+            const img = document.createElement('img');
+            img.className = 'frame-image';
+            img.src = frameData.data;
+            img.alt = `抽样帧 ${frameData.frameIndex + 1}`;
+            img.loading = 'lazy';
+            
+            const frameLabel = document.createElement('div');
+            frameLabel.className = 'frame-label';
+            frameLabel.textContent = `帧 ${frameData.frameIndex + 1}`;
+            
+            frameItem.appendChild(img);
+            frameItem.appendChild(frameLabel);
+            framesGrid.appendChild(frameItem);
+        });
+        
+        // 添加查看完整帧的按钮
+        const viewAllButton = document.createElement('button');
+        viewAllButton.className = 'view-all-button';
+        viewAllButton.textContent = '查看所有帧';
+        viewAllButton.onclick = () => displayAllFrames(result);
+        framesGrid.appendChild(viewAllButton);
+        
+    } catch (error) {
+        console.error('加载抽样帧失败:', error);
+        framesGrid.innerHTML = `<div class="error">加载抽样帧失败: ${error.message}</div>`;
+    }
+}
+
+// 显示所有帧（原有功能）
+function displayAllFrames(result) {
+    framesGrid.innerHTML = '<div class="loading">正在加载所有帧...</div>';
+    
+    // 添加返回抽样视图的按钮
+    const backButton = document.createElement('button');
+    backButton.className = 'back-to-sample-button';
+    backButton.textContent = '返回抽样视图';
+    backButton.onclick = () => displaySampleFrames(result);
+    
+    const headerDiv = document.createElement('div');
+    headerDiv.className = 'all-frames-header';
+    headerDiv.innerHTML = `<h3>所有帧预览 (${result.totalFrames}帧)</h3>`;
+    headerDiv.appendChild(backButton);
+    
+    framesGrid.innerHTML = '';
+    framesGrid.appendChild(headerDiv);
+    
+    // 显示所有帧
+    for (let i = 0; i < result.totalFrames; i++) {
         const frameItem = document.createElement('div');
         frameItem.className = 'frame-item';
         
         const img = document.createElement('img');
         img.className = 'frame-image';
-        img.src = `/api/frame/${i}?gifPath=${encodeURIComponent(gifPath)}`;
+        img.src = `/api/frame/${i}?gifPath=${encodeURIComponent(result.gifPath)}`;
         img.alt = `帧 ${i + 1}`;
+        img.loading = 'lazy';
         
-        const info = document.createElement('div');
-        info.className = 'frame-info';
-        info.textContent = `帧 ${i + 1}`;
+        const frameLabel = document.createElement('div');
+        frameLabel.className = 'frame-label';
+        frameLabel.textContent = `帧 ${i + 1}`;
         
         frameItem.appendChild(img);
-        frameItem.appendChild(info);
+        frameItem.appendChild(frameLabel);
         framesGrid.appendChild(frameItem);
     }
 }

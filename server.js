@@ -91,23 +91,52 @@ async function extractGifMetadata(gifPath) {
         const metadata = await image.metadata();
 
         // 检查图像尺寸
-        const totalPixels = metadata.width * metadata.height;
-        if (totalPixels > SHARP_MAX_PIXELS) {
-            throw new Error(`图像尺寸过大: ${metadata.width}x${metadata.height} 像素`);
+        if (metadata.width * metadata.height > SHARP_MAX_PIXELS) {
+            throw new Error(`图像尺寸过大: ${metadata.width}x${metadata.height}. 最大支持: ${Math.sqrt(SHARP_MAX_PIXELS).toFixed(0)}x${Math.sqrt(SHARP_MAX_PIXELS).toFixed(0)}`);
         }
+
+        const totalFrames = metadata.pages || 1;
         
+        // 计算抽样逻辑
+        let sampleInterval = 1;
+        let sampleFrames = [];
+        
+        if (totalFrames < 10) {
+            // 小于10帧：首尾两帧
+            if (totalFrames <= 2) {
+                // 1-2帧：全部显示
+                for (let i = 0; i < totalFrames; i++) {
+                    sampleFrames.push(i);
+                }
+            } else {
+                // 3-9帧：首尾两帧
+                sampleFrames = [0, totalFrames - 1];
+            }
+        } else if (totalFrames <= 20) {
+            // 10-20帧：首、中、尾三帧
+            const middleFrame = Math.floor(totalFrames / 2);
+            sampleFrames = [0, middleFrame, totalFrames - 1];
+        } else {
+            // 大于20帧：均匀抽样5帧
+            const maxSampleFrames = 5;
+            sampleInterval = Math.floor(totalFrames / maxSampleFrames);
+            for (let i = 0; i < totalFrames; i += sampleInterval) {
+                sampleFrames.push(i);
+                if (sampleFrames.length >= maxSampleFrames) break;
+            }
+        }
+
         return {
-            success: true,
-            totalFrames: metadata.pages,
+            totalFrames,
             originalWidth: metadata.width,
-            originalHeight: metadata.height
+            originalHeight: metadata.height,
+            sampleFrames, // 抽样帧索引数组
+            sampleInterval, // 抽样间隔
+            gifPath: path.basename(gifPath)
         };
     } catch (error) {
-        console.error('GIF元数据提取错误:', error);
-        return {
-            success: false,
-            error: error.message || '处理GIF文件时发生错误'
-        };
+        console.error('提取GIF元数据失败:', error);
+        throw error;
     }
 }
 
@@ -158,11 +187,8 @@ app.post('/api/extract-frames', upload.single('gifFile'), async (req, res) => {
         gifPath = req.file.path;
         const result = await extractGifMetadata(gifPath);
         
-        if (!result.success) {
-            throw new Error(result.error);
-        }
-        
-        result.gifPath = gifPath;
+        result.success = true;
+        result.gifPath = path.basename(gifPath);
         res.json(result);
     } catch (error) {
         console.error('处理上传文件错误:', error);
@@ -199,11 +225,8 @@ app.post('/api/extract-frames-url', async (req, res) => {
         // 分解帧
         const result = await extractGifMetadata(gifPath);
         
-        if (!result.success) {
-            throw new Error(result.error);
-        }
-        
-        result.gifPath = gifPath;
+        result.success = true;
+        result.gifPath = path.basename(gifPath);
         res.json(result);
     } catch (error) {
         console.error('处理URL错误:', error);
@@ -227,7 +250,17 @@ app.get('/api/frame/:frameIndex', async (req, res) => {
         const { frameIndex } = req.params;
         const { gifPath } = req.query;
         
-        if (!gifPath || !fsSync.existsSync(gifPath)) {
+        if (!gifPath) {
+            return res.status(400).json({
+                success: false,
+                error: '缺少GIF文件参数'
+            });
+        }
+
+        // 构建完整的文件路径
+        const fullGifPath = path.join(uploadDir, gifPath);
+        
+        if (!fsSync.existsSync(fullGifPath)) {
             return res.status(404).json({
                 success: false,
                 error: 'GIF文件不存在'
@@ -235,7 +268,7 @@ app.get('/api/frame/:frameIndex', async (req, res) => {
         }
 
         // 先将文件读入内存
-        const gifBuffer = await fs.readFile(gifPath);
+        const gifBuffer = await fs.readFile(fullGifPath);
 
         const frameBuffer = await sharp(gifBuffer, { 
             page: parseInt(frameIndex)
@@ -250,6 +283,63 @@ app.get('/api/frame/:frameIndex', async (req, res) => {
         res.status(500).json({
             success: false,
             error: error.message || '获取帧时发生错误'
+        });
+    }
+});
+
+// 获取抽样帧数据的API端点
+app.get('/api/sample-frames', async (req, res) => {
+    try {
+        const { gifPath, sampleFrames } = req.query;
+        
+        if (!gifPath || !sampleFrames) {
+            return res.status(400).json({ error: '缺少必要参数' });
+        }
+
+        const fullGifPath = path.join(uploadDir, gifPath);
+        
+        if (!fsSync.existsSync(fullGifPath)) {
+            return res.status(404).json({ error: '文件不存在' });
+        }
+
+        // 解析抽样帧索引
+        const frameIndices = JSON.parse(sampleFrames);
+        
+        // 先将文件读入内存
+        const gifBuffer = await fs.readFile(fullGifPath);
+        
+        const sampleFrameData = [];
+        
+        // 提取每个抽样帧
+        for (const frameIndex of frameIndices) {
+            try {
+                const frameBuffer = await sharp(gifBuffer, { 
+                    page: frameIndex
+                })
+                .png()
+                .toBuffer();
+                
+                const base64Data = frameBuffer.toString('base64');
+                sampleFrameData.push({
+                    frameIndex,
+                    data: `data:image/png;base64,${base64Data}`
+                });
+            } catch (frameError) {
+                console.warn(`提取帧 ${frameIndex} 失败:`, frameError.message);
+                // 跳过有问题的帧，继续处理其他帧
+            }
+        }
+        
+        res.json({ 
+            success: true, 
+            sampleFrames: sampleFrameData 
+        });
+        
+    } catch (error) {
+        console.error('获取抽样帧失败:', error);
+        res.status(500).json({ 
+            error: '获取抽样帧失败',
+            details: error.message 
         });
     }
 });
