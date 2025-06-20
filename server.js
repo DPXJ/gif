@@ -344,6 +344,110 @@ app.get('/api/sample-frames', async (req, res) => {
     }
 });
 
+// FastGPT HTTP插件专用端点 - 完整GIF分析
+app.post('/api/analyze-gif', async (req, res) => {
+    let gifPath = null;
+    try {
+        const { gif_url, user_question = '请分析这个GIF的内容' } = req.body;
+        
+        if (!gif_url) {
+            return res.status(400).json({
+                success: false,
+                error: '请提供GIF文件URL',
+                message: '缺少必要参数'
+            });
+        }
+
+        // 下载GIF文件
+        console.log('开始下载GIF:', gif_url);
+        gifPath = await downloadGifFromUrl(gif_url);
+        
+        // 分解帧并获取元数据
+        console.log('开始分析GIF帧...');
+        const metadata = await extractGifMetadata(gifPath);
+        
+        // 获取抽样帧的Base64数据
+        const gifBuffer = await fs.readFile(gifPath);
+        const sampleFrameData = [];
+        
+        for (const frameIndex of metadata.sampleFrames) {
+            try {
+                const frameBuffer = await sharp(gifBuffer, { 
+                    page: frameIndex
+                })
+                .png()
+                .toBuffer();
+                
+                const base64Data = frameBuffer.toString('base64');
+                sampleFrameData.push({
+                    frameIndex,
+                    data: `data:image/png;base64,${base64Data}`
+                });
+            } catch (frameError) {
+                console.warn(`提取帧 ${frameIndex} 失败:`, frameError.message);
+            }
+        }
+        
+        // 生成AI分析提示词
+        const llm_prompt = `${user_question}
+
+请基于以下从GIF中抽取的${sampleFrameData.length}个关键帧序列进行分析回答：
+
+GIF信息：
+- 总帧数: ${metadata.totalFrames}
+- 抽样帧数: ${sampleFrameData.length}
+- 图片尺寸: ${metadata.originalWidth}x${metadata.originalHeight}
+- 抽样策略: ${getSamplingStrategyDescription(metadata.totalFrames, sampleFrameData.length)}
+
+这些帧按时间顺序排列，展示了GIF的主要内容变化。请详细分析并回答用户的问题。`;
+
+        // 返回完整结果
+        const result = {
+            success: true,
+            sampleFrames: sampleFrameData,
+            llm_prompt: llm_prompt,
+            message: `GIF处理成功，提取了${sampleFrameData.length}个关键帧`,
+            totalFrames: metadata.totalFrames,
+            samplingStrategy: getSamplingStrategyDescription(metadata.totalFrames, sampleFrameData.length),
+            originalWidth: metadata.originalWidth,
+            originalHeight: metadata.originalHeight
+        };
+        
+        console.log(`✅ GIF分析完成: ${sampleFrameData.length}个关键帧`);
+        res.json(result);
+        
+    } catch (error) {
+        console.error('GIF分析错误:', error);
+        res.status(500).json({
+            success: false,
+            error: error.message || 'GIF分析时发生错误',
+            message: '处理失败',
+            sampleFrames: [],
+            llm_prompt: `处理GIF时发生错误: ${error.message}。请检查GIF URL是否有效，以及服务是否正常运行。`,
+            totalFrames: 0,
+            samplingStrategy: '处理失败'
+        });
+    } finally {
+        // 延迟删除文件
+        if (gifPath) {
+            setTimeout(async () => {
+                await safeDeleteFile(gifPath);
+            }, 300000); // 5分钟后删除
+        }
+    }
+});
+
+// 辅助函数：获取抽样策略描述
+function getSamplingStrategyDescription(totalFrames, sampleCount) {
+    if (totalFrames < 10) {
+        return '少于10帧，显示首尾两帧';
+    } else if (totalFrames <= 20) {
+        return '10-20帧，显示首中尾三帧';
+    } else {
+        return `超过20帧，均匀抽样${sampleCount}帧`;
+    }
+}
+
 // 健康检查
 app.get('/api/health', (req, res) => {
     res.json({

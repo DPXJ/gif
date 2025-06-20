@@ -1,0 +1,47 @@
+{
+  "name": "GIF 内容理解插件",
+  "author": "Your Name",
+  "description": "接收GIF文件或URL，智能抽样分帧，并将关键帧转换为Base64数组，供大模型进行多模态理解。",
+  "version": "1.0.0",
+  "node_version": ">=18.0.0",
+  "inputs": [
+    {
+      "key": "gifSource",
+      "type": "string",
+      "label": "GIF文件源 (URL或文件路径)",
+      "required": true,
+      "description": "请输入公开可访问的GIF文件URL，或连接文件上传组件的变量。"
+    },
+    {
+      "key": "userPrompt",
+      "type": "string",
+      "label": "用户提问",
+      "required": true,
+      "description": "请输入您想对这个GIF提出的问题，例如"请描述这个GIF的内容"。"
+    }
+  ],
+  "outputs": [
+    {
+      "key": "base64Frames",
+      "type": "array",
+      "label": "Base64帧图片数组",
+      "description": "抽样后的关键帧图片数组（Base64格式），用于连接到AI节点的图片输入。"
+    },
+    {
+      "key": "llmPrompt",
+      "type": "string",
+      "label": "给大模型的组合提示词",
+      "description": "已将用户提问和引导语组合好的、可以直接发送给大模型的提示词。"
+    },
+    {
+      "key": "error",
+      "type": "string",
+      "label": "错误信息",
+      "description": "如果插件执行失败，将在此输出错误详情。"
+    }
+  ],
+  "dependencies": {
+    "sharp": "0.33.4",
+    "axios": "1.7.2"
+  }
+} 
