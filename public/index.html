@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GIF帧分解工具</title>
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <h1><i class="fas fa-film"></i> GIF帧分解工具</h1>
+            <p>上传GIF文件或输入URL，自动分解为独立帧</p>
+        </header>
+
+        <main class="main-content">
+            <!-- 输入方式选择 -->
+            <div class="input-methods">
+                <button class="method-btn active" data-method="upload">
+                    <i class="fas fa-upload"></i> 上传文件
+                </button>
+                <button class="method-btn" data-method="url">
+                    <i class="fas fa-link"></i> URL链接
+                </button>
+            </div>
+
+            <!-- 文件上传区域 -->
+            <div class="input-section" id="upload-section">
+                <div class="upload-area" id="upload-area">
+                    <i class="fas fa-cloud-upload-alt"></i>
+                    <h3>拖拽GIF文件到这里</h3>
+                    <p>或点击选择文件</p>
+                    <input type="file" id="file-input" accept=".gif" hidden>
+                    <button class="upload-btn" onclick="document.getElementById('file-input').click()">
+                        选择文件
+                    </button>
+                </div>
+            </div>
+
+            <!-- URL输入区域 -->
+            <div class="input-section hidden" id="url-section">
+                <div class="url-input-container">
+                    <input type="url" id="url-input" placeholder="请输入GIF文件的URL地址..." class="url-input">
+                    <button class="extract-btn" onclick="extractFromUrl()">
+                        <i class="fas fa-magic"></i> 分解帧
+                    </button>
+                </div>
+            </div>
+
+            <!-- 处理状态 -->
+            <div class="status-section hidden" id="status-section">
+                <div class="status-content">
+                    <div class="spinner"></div>
+                    <p id="status-text">正在处理GIF文件...</p>
+                </div>
+            </div>
+
+            <!-- 结果展示区域 -->
+            <div class="results-section hidden" id="results-section">
+                <div class="results-header">
+                    <h2><i class="fas fa-images"></i> 分解结果</h2>
+                    <div class="results-info">
+                        <span id="frame-count">总帧数: 0</span>
+                        <span id="image-size">尺寸: 0x0</span>
+                    </div>
+                </div>
+
+                <div class="controls">
+                    <button class="control-btn" onclick="downloadAllFrames()">
+                        <i class="fas fa-download"></i> 下载所有帧
+                    </button>
+                    <button class="control-btn" onclick="copyFrameData()">
+                        <i class="fas fa-copy"></i> 复制帧数据
+                    </button>
+                    <button class="control-btn" onclick="resetApp()">
+                        <i class="fas fa-redo"></i> 重新开始
+                    </button>
+                </div>
+
+                <div class="frames-grid" id="frames-grid">
+                    <!-- 帧图像将在这里显示 -->
+                </div>
+
+                <div class="frame-data-section">
+                    <h3><i class="fas fa-code"></i> 帧数据 (JSON格式)</h3>
+                    <div class="data-container">
+                        <pre id="frame-data">帧数据将在这里显示...</pre>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 错误提示 -->
+            <div class="error-section hidden" id="error-section">
+                <div class="error-content">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    <p id="error-text">发生错误</p>
+                </div>
+            </div>
+        </main>
+
+        <footer class="footer">
+            <p>&copy; 2024 GIF帧分解工具 | 基于Node.js + Sharp构建</p>
+        </footer>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html> 
