@@ -1,5 +1,6 @@
 // 全局变量
 let currentResult = null;
+let currentSampleFrameData = null;
 let currentMethod = 'upload';
 
 // DOM元素
@@ -245,6 +246,12 @@ async function displaySampleFrames(result) {
             throw new Error(data.error || '获取抽样帧失败');
         }
         
+        // 存储抽样帧数据，用于在帧数据区域显示
+        currentSampleFrameData = data;
+        
+        // 更新帧数据显示
+        displayFrameData(result);
+        
         // 清空加载提示
         framesGrid.innerHTML = '';
         
@@ -292,6 +299,10 @@ async function displaySampleFrames(result) {
 
 // 显示所有帧（原有功能）
 function displayAllFrames(result) {
+    // 清除抽样帧数据，显示基本数据
+    currentSampleFrameData = null;
+    displayFrameData(result);
+    
     framesGrid.innerHTML = '<div class="loading">正在加载所有帧...</div>';
     
     // 添加返回抽样视图的按钮
@@ -331,7 +342,7 @@ function displayAllFrames(result) {
 
 // 显示帧数据
 function displayFrameData(result) {
-    const dataToShow = {
+    const basicData = {
         success: result.success,
         totalFrames: result.totalFrames,
         originalWidth: result.originalWidth,
@@ -339,7 +350,17 @@ function displayFrameData(result) {
         gifPath: result.gifPath
     };
     
-    frameData.textContent = JSON.stringify(dataToShow, null, 2);
+    let displayData = basicData;
+    
+    // 如果有抽样帧数据，则显示完整的抽样JSON
+    if (currentSampleFrameData && currentSampleFrameData.success) {
+        displayData = {
+            ...basicData,
+            sampleFrameData: currentSampleFrameData
+        };
+    }
+    
+    frameData.textContent = JSON.stringify(displayData, null, 2);
 }
 
 // 下载所有帧
@@ -396,6 +417,7 @@ async function copyFrameData() {
 // 重新开始
 function resetApp() {
     currentResult = null;
+    currentSampleFrameData = null;
     fileInput.value = '';
     urlInput.value = '';
     hideAllSections();
